@@ -2,82 +2,45 @@ using System;
 using System.IO;
 using System.Net.Http;
 using System.Threading.Tasks;
-using System.Xml.Linq;
 
-namespace SystemControlApp.Controllers
+public class UpdateController
 {
-    public static class UpdateController
+    private readonly string _folderPath;
+    private readonly string _localXmlPath;
+    private readonly string _newExePath;
+    private readonly string _newXmlPath;
+
+    public UpdateController(string folderPath)
     {
-        private static readonly string BasePath =
-            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "WaulySignage");
+        _folderPath = folderPath;
 
-        private static readonly string XmlPath = Path.Combine(BasePath, "update.xml");
+        _localXmlPath = Path.Combine(folderPath, "config.xml");
+        _newExePath = Path.Combine(folderPath, "wauly_app_new.exe");
+        _newXmlPath = Path.Combine(folderPath, "config_new.xml");
+    }
 
-        public static async Task<bool> CheckAndDownload()
+    public async Task CheckAndDownloadUpdate(string serverXmlUrl)
+    {
+        using var http = new HttpClient();
+
+        var xmlString = await http.GetStringAsync(serverXmlUrl);
+
+        var serializer = new System.Xml.Serialization.XmlSerializer(typeof(AppConfig));
+        AppConfig serverConfig;
+
+        using (var reader = new StringReader(xmlString))
         {
-            Directory.CreateDirectory(BasePath);
-
-            string xmlUrl = "http://192.168.0.106:8080/update.xml";
-            string tempXml = Path.Combine(BasePath, "temp_update.xml");
-
-
-            using (HttpClient client = new HttpClient())
-            {
-                var xmlData = await client.GetByteArrayAsync(xmlUrl);
-                await File.WriteAllBytesAsync(tempXml, xmlData);
-            }
-
-            var newDoc = XDocument.Load(tempXml);
-            string newVersion = newDoc.Root.Element("Version")?.Value;
-
-            string currentVersion = GetLocalVersion();
-
-            if (currentVersion != null &&
-                Version.Parse(newVersion) <= Version.Parse(currentVersion))
-            {
-                return false;
-            }
-
-            string exeUrl = newDoc.Root.Element("ExeUrl")?.Value;
-            string fileName = newDoc.Root.Element("FileName")?.Value;
-
-            CleanupOldDownloads();
-
-            string newExePath = Path.Combine(BasePath, "downloaded_" + fileName);
-
-            using (HttpClient client = new HttpClient())
-            {
-                var exeData = await client.GetByteArrayAsync(exeUrl);
-                await File.WriteAllBytesAsync(newExePath, exeData);
-            }
-
-            File.Copy(tempXml, XmlPath, true);
-
-            return true;
+            serverConfig = (AppConfig)serializer.Deserialize(reader);
         }
 
-        public static bool IsFirstTimeInstall()
+        var localConfig = XmlHelper.Load(_localXmlPath);
+
+        if (localConfig == null || serverConfig.Version != localConfig.Version)
         {
-            return GetLocalVersion() == null;
-        }
+            var exeBytes = await http.GetByteArrayAsync(serverConfig.DownloadUrl);
+            await File.WriteAllBytesAsync(_newExePath, exeBytes);
 
-        private static void CleanupOldDownloads()
-        {
-            var files = Directory.GetFiles(BasePath, "downloaded_*.exe");
-
-            foreach (var file in files)
-            {
-                try { File.Delete(file); } catch { }
-            }
-        }
-
-        private static string GetLocalVersion()
-        {
-            if (!File.Exists(XmlPath))
-                return null;
-
-            var doc = XDocument.Load(XmlPath);
-            return doc.Root.Element("Version")?.Value;
+            XmlHelper.Save(_newXmlPath, serverConfig);
         }
     }
 }

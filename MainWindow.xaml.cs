@@ -26,8 +26,7 @@ namespace SystemControlApp
                 
             };
 
-
-            Task.Run(() => InitializeWatchdog());
+            AppLauncherController.LaunchApp();
 
 
             CheckInternetStatus();
@@ -166,59 +165,14 @@ namespace SystemControlApp
 
         private async void CheckUpdate_Click(object sender, RoutedEventArgs e)
         {
-            try
-            {
-                await UpdateController.CheckAndDownload();
+            string folderPath = @"C:\Program Files\Wauly Signage\App";
+            string serverXmlUrl = "https://yourserver.com/config.xml";
 
-                MessageBox.Show(
-                    "Update downloaded successfully (if available).\nIt will be installed on next startup.",
-                    "Update",
-                    MessageBoxButton.OK,
-                    MessageBoxImage.Information);
-            }
-            catch
-            {
-                MessageBox.Show(
-                    "Failed to check or download update.",
-                    "Error",
-                    MessageBoxButton.OK,
-                    MessageBoxImage.Error);
-            }
+            var updater = new UpdateController(folderPath);
+            await updater.CheckAndDownloadUpdate(serverXmlUrl);
+
+            MessageBox.Show("Update downloaded (if available). Will install on next launch.");
         }
-
-        private async void InitializeWatchdog()
-        {
-            try
-            {
-                bool isInstalled = AppLauncherController.IsInstalled();
-                bool isFirstTime = UpdateController.IsFirstTimeInstall();
-
-                // 🆕 FIRST INSTALL
-                if (!isInstalled || isFirstTime)
-                {
-                    bool downloaded = await UpdateController.CheckAndDownload();
-
-                    if (downloaded)
-                    {
-                        AppInstallerController.InstallIfAvailable();
-
-                        await Task.Delay(5000);
-
-                        AppLauncherController.LaunchApp();
-                    }
-
-                    return;
-                }
-
-                AppLauncherController.LaunchApp();
-            }
-            catch
-            {
-                // silent watchdog
-            }
-        }
-
-
 
     }
 }

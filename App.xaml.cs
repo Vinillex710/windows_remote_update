@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Diagnostics;
+using System.IO;
 using System.Threading;
 using System.Windows;
 using SystemControlApp.Controllers;
@@ -12,7 +13,7 @@ namespace SystemControlApp
         private WatchdogController? _watchdog;
         private bool _isShuttingDownCleanly = false;
 
-        protected override void OnStartup(StartupEventArgs e)
+        protected override async void OnStartup(StartupEventArgs e)
         {
             const string mutexName = @"Global\SystemControlApp_Watchdog";
 
@@ -31,16 +32,35 @@ namespace SystemControlApp
 
             base.OnStartup(e);
 
-            string targetExePath = @"C:\Program Files\Wauly Signage\wauly_app.exe";
+            string folderPath = @"C:\Program Files\Wauly Signage\App";
+            string targetExePath = Path.Combine(folderPath, "wauly_app.exe");
+            string serverXmlUrl = "http://10.244.96.210/config.xml";
 
+        
+
+            //// =========================
+            //// 📦 INITIAL SETUP
+            //// =========================
+            //await InitialSetup.EnsureAppExists(folderPath, serverXmlUrl);
+
+            ////// =========================
+            ////// 🔁 INSTALL DOWNLOADED UPDATE (if any)
+            ////// =========================
+            //Installer.InstallIfAvailable(folderPath);
+
+            // =========================
+            // 🚀 START WATCHDOG
+            // =========================
             _watchdog = new WatchdogController(targetExePath);
             _watchdog.Start();
 
-            // SINGLE window creation
+
+            // =========================
+            // 🪟 UI WINDOW
+            // =========================
             var mainWindow = new MainWindow();
             MainWindow = mainWindow;
 
-            // Relaunch watchdog if window is closed manually
             mainWindow.Closed += (_, __) =>
             {
                 if (!_isShuttingDownCleanly)
@@ -78,7 +98,7 @@ namespace SystemControlApp
             }
             catch
             {
-                // last-resort: let Task Scheduler handle restart
+                // fallback
             }
             finally
             {
